@@ -112,10 +112,17 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // matchRoute returns the route whose path is a prefix of reqPath. For
 // unambiguous matching each route.Path owns itself and its sub-tree — i.e.,
 // "/preview" matches /preview, /preview/, and /preview/foo but NOT /previewx.
+//
+// A route at path "/" is the root/catch-all: it matches anything that hasn't
+// already been claimed by a reserved public endpoint (handled in ServeHTTP
+// before this function is called).
 func (g *Gateway) matchRoute(reqPath string) *routeHandler {
 	var best *routeHandler
 	for _, r := range g.routes {
-		if reqPath == r.route.Path || strings.HasPrefix(reqPath, r.route.Path+"/") {
+		matches := r.route.Path == "/" ||
+			reqPath == r.route.Path ||
+			strings.HasPrefix(reqPath, r.route.Path+"/")
+		if matches {
 			// Longest-prefix wins (though route paths today can't nest —
 			// validation forbids duplicates and reserved-path shadowing).
 			if best == nil || len(r.route.Path) > len(best.route.Path) {

@@ -291,6 +291,68 @@ func TestInviteErrorShowsHelpfulDetail(t *testing.T) {
 	}
 }
 
+func TestRootRouteCatchesEverything(t *testing.T) {
+	// Build an env whose single route is mounted at "/" — this is the
+	// "dedicate the whole VPS to one upstream" shape used in the
+	// home→VPS→user deployment guide.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("root:" + r.URL.Path))
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{
+		Server: config.Server{Domain: "t", SiteName: "t", SessionTTL: 3600},
+		TLS:    config.TLS{Mode: config.TLSModeHTTP},
+		Routes: []config.Route{{Name: "app", Path: "/", Upstream: upstream.URL}},
+	}
+	st, _ := store.Open(filepath.Join(t.TempDir(), "db"))
+	defer st.Close()
+	key := make([]byte, 64)
+	_, _ = rand.Read(key)
+	signer, _ := token.New(key)
+	gw, err := New(cfg, st, signer, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(gw)
+	defer ts.Close()
+	jar, _ := newCookieJar()
+	client := &http.Client{Jar: jar, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+
+	// Mint a token for the root route + redeem it.
+	jwt, jti, _ := signer.Mint("alice", "app", "", nil)
+	_, _ = st.CreateToken(t.Context(), store.CreateTokenInput{JTI: jti, Label: "alice", Route: "app"})
+	if resp, err := client.Get(ts.URL + "/invite?token=" + jwt); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+	}
+
+	// Deep paths should proxy through.
+	for _, p := range []string{"/", "/foo", "/foo/bar", "/assets/app.css"} {
+		resp, err := client.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := strReadAll(t, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || body != "root:"+p {
+			t.Errorf("path=%s status=%d body=%q", p, resp.StatusCode, body)
+		}
+	}
+
+	// Reserved endpoints are still handled by speakeasy, not the upstream.
+	resp, err := client.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strReadAll(t, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.HasPrefix(body, "ok") {
+		t.Fatalf("/health must be served by speakeasy, got %d %q", resp.StatusCode, body)
+	}
+}
+
 func TestAdminHandlerDispatched(t *testing.T) {
 	e := newTestEnv(t)
 	e.gw.SetAdminHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
