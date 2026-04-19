@@ -253,9 +253,27 @@ sudo chmod 0750 /var/lib/speakeasy
 So you can run the CLI (`speakeasy token mint ...`) without `sudo`:
 
 ```shell
-sudo usermod -aG speakeasy $USER
-# Log out + back in for group membership to take effect.
+# Make sure $USER is actually your login name first — it won't be if
+# you su'd into root, or if you sudo this command with a fresh env.
+echo "$USER"
+sudo usermod -aG speakeasy "$USER"
 ```
+
+**Then log out and back in** — group membership is loaded at session
+creation, so an existing shell won't see it until you reconnect. Verify:
+
+```shell
+groups | tr ' ' '\n' | grep -qx speakeasy && echo "OK — in speakeasy group" \
+  || echo "NOT in speakeasy group yet; re-log in (or run 'newgrp speakeasy')"
+
+# And as a real-world check — this should work without sudo once the
+# daemon is running (next steps). "(no tokens)" is the expected output.
+# speakeasy --config /etc/speakeasy/config.toml token list
+```
+
+If you skip this, every CLI call will need `sudo` — functional, but less
+tidy. (The daemon itself doesn't care; it's the `/run/speakeasy/speakeasy.sock`
+file that's group-readable.)
 
 ### Write `/etc/speakeasy/config.toml`
 
