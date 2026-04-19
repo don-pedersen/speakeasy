@@ -1,0 +1,62 @@
+# Speakeasy configuration.
+# Default path: /etc/speakeasy/config.toml
+# Override with: speakeasy --config /path/to/config.toml serve
+
+[server]
+# Public hostname users will hit. Must match the DNS record pointing at this VPS.
+domain = "example.com"
+
+# Display name shown on the invitation landing page. Defaults to `domain`.
+# site_name = "My Site"
+
+# Ports the gateway listens on. 80 is required for autocert HTTP-01 challenges.
+# http_port  = 80
+# https_port = 443
+
+# Where the admin password hash is stored. Created by `speakeasy admin set-password`.
+# admin_password_file = "/etc/speakeasy/admin.hash"
+
+# Writable state: sqlite db, autocert cache, etc.
+# data_dir = "/var/lib/speakeasy"
+
+# Unix socket for CLI <-> daemon IPC. Mode 0660, group-owned by `speakeasy`.
+# socket_path = "/run/speakeasy/speakeasy.sock"
+
+# Session cookie lifetime, in seconds. Default: 24h.
+# session_ttl = 86400
+
+# Trust a fronting reverse proxy (Cloudflare Tunnel, nginx sidecar, etc.) that
+# terminates TLS and forwards plain HTTP. When true, session cookies keep the
+# Secure flag even with tls.mode = "http", client IP is read from
+# X-Forwarded-For, and HTTP->HTTPS redirects are suppressed.
+# trust_proxy = false
+
+
+[tls]
+# "autocert" fetches a Let's Encrypt certificate automatically (requires port 80).
+# "files"   uses a certificate you provide — set cert_file and key_file below.
+# "http"    plain HTTP only — dev, or behind a TLS-terminating proxy
+#           (set server.trust_proxy = true in that case).
+mode = "autocert"
+
+# cache_dir defaults to <data_dir>/certs.
+# cache_dir = "/var/lib/speakeasy/certs"
+
+# Only used when mode = "files":
+# cert_file = "/etc/ssl/certs/example.com.pem"
+# key_file  = "/etc/ssl/private/example.com.key"
+
+
+# Routes — each route is a gated mount point. A token is bound to exactly one
+# route and grants access to that path prefix only.
+#
+# [[routes]]
+# name         = "client-preview"
+# path         = "/preview"
+# upstream     = "http://localhost:8081"
+# strip_prefix = false        # if true, /preview/foo is proxied to upstream as /foo
+
+# [[routes]]
+# name     = "demo"
+# path     = "/demo"
+# upstream = "http://localhost:8082"

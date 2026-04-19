@@ -1,0 +1,27 @@
+# Build output
+/speakeasy
+/dist/
+/bin/
+
+# Local state
+*.db
+*.sqlite
+*.sqlite-journal
+
+# Secrets / local config
+/config.toml
+/.env
+*.hash
+
+# Go
+*.test
+*.out
+/coverage.txt
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Claude Code per-project settings
+.claude/

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Speakeasy admin</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root { color-scheme: light dark; --fg:#1a1a1a; --bg:#f7f7f8; --card:#fff; --line:#e5e5ea; --muted:#6b6b6b; --accent:#1a1a1a; --accent-fg:#fff; --danger:#b94141; --ok:#2e7d32; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e6e6e6; --bg:#0e0e11; --card:#17171c; --line:#2a2a31; --muted:#9a9a9e; --accent:#fff; --accent-fg:#0e0e11; --danger:#e87070; --ok:#7fc686; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    margin: 0; background: var(--bg); color: var(--fg); min-height: 100vh;
+  }
+  header { padding: 1.5rem 1.5rem 1rem; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+  header p { margin: .25rem 0 0; color: var(--muted); font-size: .85rem; }
+  main { max-width: 56rem; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.5rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem 1.5rem; }
+  .card h2 { margin: 0 0 1rem; font-size: .95rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+  form { display: grid; gap: .75rem; }
+  .row { display: grid; grid-template-columns: 8rem 1fr; align-items: center; gap: 1rem; }
+  label { font-size: .9rem; color: var(--muted); }
+  input, select, textarea {
+    font: inherit; padding: .5rem .75rem; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%;
+  }
+  textarea { resize: vertical; min-height: 4rem; }
+  button, .btn {
+    font: inherit; padding: .55rem 1rem; border-radius: 8px; border: 0; cursor: pointer;
+    background: var(--accent); color: var(--accent-fg); font-weight: 500;
+  }
+  button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: .5rem .5rem; border-bottom: 1px solid var(--line); }
+  th { font-weight: 500; color: var(--muted); text-transform: uppercase; font-size: .7rem; letter-spacing: .05em; }
+  .status { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; }
+  .status.active { background: rgba(46,125,50,.15); color: var(--ok); }
+  .status.revoked { background: rgba(185,65,65,.15); color: var(--danger); }
+  .status.expired { background: var(--line); color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
+  .result { display: grid; grid-template-columns: 1fr auto; gap: 1.5rem; align-items: start; }
+  .result .details { display: grid; gap: .5rem; }
+  .result .field { display: grid; gap: .25rem; }
+  .result .field label { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+  .result .val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .8rem; padding: .5rem .65rem; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 6px; word-break: break-all; cursor: copy;
+  }
+  .result .val:active { filter: brightness(.9); }
+  .result img { width: 10rem; height: 10rem; border: 1px solid var(--line); border-radius: 8px; padding: .5rem; background: #fff; }
+  .empty { color: var(--muted); text-align: center; padding: 1.5rem 0; font-style: italic; }
+  .error { color: var(--danger); font-size: .85rem; margin-top: .5rem; }
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--accent); color: var(--accent-fg); padding: .6rem 1rem; border-radius: 8px; font-size: .85rem; opacity: 0; transition: opacity .15s; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Speakeasy admin</h1>
+  <p id="hdr-sub">Mint, list, and revoke access tokens.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Mint a token</h2>
+    <form id="mint-form">
+      <div class="row">
+        <label for="f-label">Label</label>
+        <input id="f-label" name="label" required placeholder="alice" autocomplete="off">
+      </div>
+      <div class="row">
+        <label for="f-route">Route</label>
+        <select id="f-route" name="route" required></select>
+      </div>
+      <div class="row">
+        <label for="f-expires">Expires</label>
+        <select id="f-expires" name="expires">
+          <option value="24h">24 hours</option>
+          <option value="7d">7 days</option>
+          <option value="30d" selected>30 days</option>
+          <option value="90d">90 days</option>
+          <option value="never">Never</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="f-msg">Message</label>
+        <textarea id="f-msg" name="msg" placeholder="Optional welcome note (shown on invite page)"></textarea>
+      </div>
+      <div class="row">
+        <span></span>
+        <div><button type="submit" id="mint-submit">Mint token</button></div>
+      </div>
+    </form>
+    <div id="mint-error" class="error" hidden></div>
+    <div id="mint-result" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Tokens</h2>
+    <div id="token-list"></div>
+  </section>
+</main>
+<div id="toast" class="toast">Copied</div>
+
+<script>
+(function () {
+  const $  = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  function api(method, path, body) {
+    const opts = { method, headers: { "Accept": "application/json" }, credentials: "same-origin" };
+    if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+    return fetch(path, opts).then(async (r) => {
+      if (r.status === 204) return null;
+      const text = await r.text();
+      let data; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (!r.ok) throw new Error((data && data.error) ? data.error : r.statusText);
+      return data;
+    });
+  }
+
+  function toast(msg) {
+    const el = $("#toast"); el.textContent = msg; el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 1200);
+  }
+  function copy(text) { navigator.clipboard.writeText(text).then(() => toast("Copied")); }
+
+  async function loadRoutes() {
+    const { routes } = await api("GET", "/admin/api/routes");
+    const sel = $("#f-route");
+    sel.innerHTML = routes.map(r => `<option value="${esc(r.name)}">${esc(r.name)} (${esc(r.path)})</option>`).join("");
+    if (routes.length === 0) {
+      sel.innerHTML = `<option disabled>no routes configured</option>`;
+      $("#mint-submit").disabled = true;
+    }
+  }
+
+  function statusOf(t) {
+    if (t.revoked_at) return "revoked";
+    if (t.expires_at && new Date(t.expires_at) < new Date()) return "expired";
+    return "active";
+  }
+  function fmt(ts) { return ts ? new Date(ts).toLocaleString() : "—"; }
+
+  async function loadTokens() {
+    const { tokens } = await api("GET", "/admin/api/tokens");
+    const host = $("#token-list");
+    if (!tokens || tokens.length === 0) {
+      host.innerHTML = `<p class="empty">No tokens yet. Mint one above.</p>`; return;
+    }
+    host.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Label</th><th>Route</th><th>Status</th><th>Expires</th><th>Last used</th><th></th>
+        </tr></thead>
+        <tbody>${tokens.map(t => {
+          const st = statusOf(t);
+          const btn = (st === "active")
+            ? `<button class="danger" data-action="revoke" data-jti="${esc(t.jti)}">Revoke</button>`
+            : (t.revoked_at ? `<button class="secondary" data-action="unrevoke" data-jti="${esc(t.jti)}">Unrevoke</button>` : "");
+          return `<tr>
+            <td>${esc(t.label)}</td>
+            <td>${esc(t.route)}</td>
+            <td><span class="status ${st}">${st}</span></td>
+            <td>${t.expires_at ? fmt(t.expires_at) : "never"}</td>
+            <td>${fmt(t.last_used_at)}</td>
+            <td>${btn}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
+    $$("#token-list button").forEach(b => b.addEventListener("click", async (e) => {
+      const jti = b.dataset.jti, act = b.dataset.action;
+      b.disabled = true;
+      try { await api("POST", `/admin/api/tokens/${encodeURIComponent(jti)}/${act}`); await loadTokens(); toast(act === "revoke" ? "Revoked" : "Unrevoked"); }
+      catch (err) { alert(err.message); b.disabled = false; }
+    }));
+  }
+
+  $("#mint-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const body = {
+      label:   form.label.value.trim(),
+      route:   form.route.value,
+      expires: form.expires.value,
+      msg:     form.msg.value,
+    };
+    $("#mint-error").hidden = true;
+    $("#mint-submit").disabled = true;
+    try {
+      const res = await api("POST", "/admin/api/tokens", body);
+      showResult(res);
+      form.label.value = ""; form.msg.value = "";
+      await loadTokens();
+    } catch (err) {
+      $("#mint-error").textContent = err.message;
+      $("#mint-error").hidden = false;
+    } finally {
+      $("#mint-submit").disabled = false;
+    }
+  });
+
+  function showResult(r) {
+    const host = $("#mint-result"); host.hidden = false;
+    host.innerHTML = `
+      <div class="card" style="margin-top:1.25rem">
+        <h2>New token for ${esc(r.label)}</h2>
+        <div class="result">
+          <div class="details">
+            <div class="field">
+              <label>Invite URL (share this)</label>
+              <div class="val" data-copy="${esc(r.invite_url)}">${esc(r.invite_url)}</div>
+            </div>
+            <div class="field">
+              <label>Raw token</label>
+              <div class="val" data-copy="${esc(r.token)}">${esc(r.token).slice(0, 48)}…</div>
+            </div>
+            <div class="field">
+              <label>JTI</label>
+              <div class="val" data-copy="${esc(r.jti)}">${esc(r.jti)}</div>
+            </div>
+          </div>
+          ${r.qr_code ? `<img alt="QR code" src="${esc(r.qr_code)}">` : ""}
+        </div>
+      </div>`;
+    host.querySelectorAll(".val[data-copy]").forEach(v => v.addEventListener("click", () => copy(v.dataset.copy)));
+  }
+
+  Promise.all([loadRoutes(), loadTokens()]).catch(err => {
+    $("#hdr-sub").innerHTML = `<span style="color:var(--danger)">Error loading: ${esc(err.message)}</span>`;
+  });
+})();
+</script>
+</body>
+</html>
