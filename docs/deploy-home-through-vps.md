@@ -63,15 +63,73 @@ adduser don && usermod -aG sudo don
 
 ### Point DNS at the VPS
 
-In your DNS provider, add an `A` record for `share.example.com` pointing at
-the VPS's public IP. Keep the TTL low (300s) while you're setting things up.
+You need `share.example.com` (or whatever hostname you choose) to resolve to
+the VPS's public IP. The quick path depends on where your domain lives.
 
-Verify:
+#### Using DartNode
+
+DartNode runs its own DNS on PowerDNS (nameservers `ns1.web.dartnode.net`,
+`ns2.web.dartnode.net`). You have three options, in order of least friction:
+
+**Easiest — a free `dart.page` subdomain.** DartNode gives you free
+subdomains under `dart.page` for any VPS you run with them. In the dashboard
+at `https://dartnode.com/app` (older UI) or `https://dartnode.com/network`
+(newdash), find the **Domains** section, click **Add Domain → Free
+Subdomain**, and pick something like `yourname.dart.page`. Point the `A`
+record at your VPS's floating / primary IP.
+
+**Bring your own domain, use DartNode DNS.** In the dashboard **Domains**
+section, click **Add Domain → Just Use My Domain** and enter
+`example.com`. DartNode then tells you to delegate the zone by setting
+these nameservers at your current registrar:
+
+```
+ns1.web.dartnode.net
+ns2.web.dartnode.net
+```
+
+Once delegation propagates (up to 24 h), add an `A` record in the DartNode
+DNS page pointing `share.example.com` → VPS IP.
+
+**Register or transfer the domain to DartNode ($10/yr).** Same dashboard,
+**Register a New Domain** or **Transfer a Domain**. Once the domain lands,
+the **DNS Records** tab lets you add the `A` record directly.
+
+For rDNS (reverse DNS) — not required for speakeasy, but nice to have —
+DartNode's **Network Center → rDNS Records** page lets you set the PTR for
+the VPS IP to `share.example.com`.
+
+#### Using Cloudflare / Namecheap / any other DNS host
+
+Log in to whichever service hosts your DNS zone and add an `A` record:
+
+| Field | Value                             |
+|-------|-----------------------------------|
+| Type  | `A`                               |
+| Name  | `share` (or `@` for the apex)     |
+| Value | Your VPS's public IPv4            |
+| TTL   | 300 seconds (raise later)         |
+
+If you use Cloudflare, **turn the proxy (orange cloud) OFF** for this
+record — speakeasy handles its own TLS with autocert, and an extra proxy
+will either break the ACME challenge or put Cloudflare in the path of
+every request. Leave it as "DNS only" (grey cloud).
+
+#### Verify
 
 ```shell
+# `dig` from dnsutils — install first on Ubuntu/Debian:
+sudo apt install -y dnsutils
 dig +short share.example.com
-# should print the VPS's IP
+
+# Or, without installing anything (glibc has getent built in):
+getent hosts share.example.com
+
+# Or: a one-liner in Python 3 (present on almost every distro):
+python3 -c "import socket; print(socket.gethostbyname('share.example.com'))"
 ```
+
+Any of these should print the VPS's public IP.
 
 ### Open firewall ports
 
