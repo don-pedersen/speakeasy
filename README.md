@@ -132,6 +132,15 @@ speakeasy token list
 Run speakeasy with `tls.mode = "autocert"`. Point DNS at the VPS, open ports
 80+443, run `speakeasy serve` under systemd. Done.
 
+### Home app behind a VPS (recommended for home sharing)
+
+Run speakeasy on a cheap VPS with a public IP, tunnel back to your home
+box over Tailscale or WireGuard, proxy incoming invites to the home app.
+External users only ever see the VPS; nothing at home is publicly reachable.
+
+See the step-by-step guide:
+**[docs/deploy-home-through-vps.md](docs/deploy-home-through-vps.md)**.
+
 ### Home machine behind a residential ISP
 
 Residential ISPs commonly block inbound 80/443, break Let's Encrypt via
