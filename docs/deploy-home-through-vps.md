@@ -211,14 +211,25 @@ If the app only binds to `127.0.0.1`, Tailscale won't reach it. Bind to
 
 ## Step 3 — Install speakeasy on the VPS
 
-Until the `.deb` package ships, build from source. Go 1.25 is required.
+Until the `.deb` package ships, build from source. Go 1.25+ is required.
+
+Don't use `apt install golang-go` — Debian/Ubuntu ships an older toolchain
+that won't satisfy speakeasy's transitive deps. Install the upstream tarball:
 
 ```shell
-# Install Go (adjust version if newer is out)
-curl -LO https://go.dev/dl/go1.25.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.25.linux-amd64.tar.gz
+# Grab whatever Go calls "current stable" today (e.g. go1.26.2).
+GO_VER=$(curl -fsSL https://go.dev/VERSION?m=text | head -1)
+curl -LO "https://go.dev/dl/${GO_VER}.linux-amd64.tar.gz"
+
+# Sanity-check before extracting — a failed download would otherwise leave
+# you with a saved HTML error page and a cryptic tar error.
+file "${GO_VER}.linux-amd64.tar.gz"
+# Expected: <file>: gzip compressed data, ...
+
+sudo tar -C /usr/local -xzf "${GO_VER}.linux-amd64.tar.gz"
 echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh
 . /etc/profile.d/go.sh
+go version
 
 # Build speakeasy
 git clone https://git.hou.snaju.com/dpedersen/speakeasy.git
