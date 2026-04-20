@@ -190,22 +190,103 @@ into speakeasy as the upstream.
 **Tip:** Tailscale's MagicDNS lets you use the hostname (`home-server:3000`)
 instead of the 100.x IP. Leave MagicDNS enabled; it's easier to read.
 
-### Lock down the home app
+### Reaching apps on *other* LAN machines
 
-On the home box, make sure the app only accepts connections from the
-Tailscale interface — not from your LAN, not from anywhere. Exactly how
-depends on the app, but typically:
+If the app you want to share runs on a different box than the Tailscale
+peer (say, `192.168.86.51:5173` while Tailscale is installed on
+`home-server`), the VPS can't see it directly — Tailscale only connects
+hosts that run the daemon. You have three choices, in order of how I'd
+actually pick:
+
+**(a) Turn `home-server` into a subnet router.** One Tailscale install
+exposes the whole LAN; new apps = new `[[routes]]` blocks, no tunnel
+churn.
 
 ```shell
-# Your app listens on 0.0.0.0:3000? Change it to bind only to the
-# Tailscale address:
-tailscale ip -4      # prints the home box's tailscale IP, e.g. 100.64.1.5
-# Then start the app with: --bind 100.64.1.5:3000
-# Or bind to 127.0.0.1:3000 plus a tailscale serve / funnel rule.
+# On home-server — enable IP forwarding once:
+echo 'net.ipv4.ip_forward=1'         | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+echo 'net.ipv6.conf.all.forwarding=1'| sudo tee -a /etc/sysctl.d/99-tailscale.conf
+sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
+
+# Advertise your LAN to the tailnet (adjust subnet):
+sudo tailscale up --advertise-routes=192.168.86.0/24
 ```
 
-If the app only binds to `127.0.0.1`, Tailscale won't reach it. Bind to
-`0.0.0.0` or to the Tailscale IP.
+Then in the [Tailscale admin](https://login.tailscale.com/admin/machines),
+click `home-server` → **Edit route settings** → approve
+`192.168.86.0/24`.
+
+On the VPS, accept the advertised routes:
+
+```shell
+sudo tailscale up --accept-routes
+curl -sI http://192.168.86.51:5173/   # LAN IP now reachable from the VPS
+```
+
+Your speakeasy upstream becomes `http://192.168.86.51:5173` — the LAN
+address directly.
+
+**(b) Install Tailscale on each app host.** Simple when it's one or two
+machines. Gets tedious for many devices, impossible for things that
+can't run the daemon (printers, IoT, appliances).
+
+**(c) Reverse-proxy hop on `home-server`.** Run nginx/caddy on the
+Tailscale host that forwards to the LAN app. Works without subnet
+routing but adds a hop for no real gain; use only if (a) and (b) aren't
+an option.
+
+### Lock down the home app
+
+Once the VPS can reach your app, make sure the app *itself* is bound
+sanely. Exactly how depends on the app, but two cases are very common:
+
+**Production apps** (a built binary, a static site, a running service):
+bind to the interface that speakeasy reaches it on, and nothing else.
+
+```shell
+# If the app lives on the Tailscale peer itself:
+tailscale ip -4        # prints 100.x.x.x for this host
+# Start the app bound to that address — not 0.0.0.0, not 127.0.0.1.
+
+# If the app lives on a LAN host reached via subnet route:
+# Bind it to the LAN IP (192.168.86.51), or to 0.0.0.0 and firewall the LAN.
+```
+
+If the app only binds to `127.0.0.1`, Tailscale / the LAN won't reach
+it. You'll see `connection refused` from the VPS.
+
+**Vite / Next.js / Rails / similar dev servers** have extra quirks
+because they were designed for same-machine browser access:
+
+- **Bind**: default is `127.0.0.1`. Start Vite with `--host` (or
+  `server.host: true` in `vite.config.*`); Next with `next dev -H 0.0.0.0`;
+  Rails with `bin/rails s -b 0.0.0.0`.
+- **Host header allowlist** (Vite 5+): requests from `donpedersen.com`
+  are rejected by default. Add your domain:
+
+  ```js
+  // vite.config.js
+  export default {
+    server: {
+      host: true,
+      allowedHosts: ['donpedersen.com', '.donpedersen.com'],
+    },
+  }
+  ```
+
+  Next.js and Rails have similar knobs; consult each project's docs if
+  you see a "Not Found" or "Blocked host" error with a working
+  speakeasy route.
+- **HMR / live-reload**: Vite's hot-reload uses a WebSocket back to the
+  origin. Speakeasy's reverse proxy handles WS upgrades, but if the
+  browser console shows HMR connecting to `ws://localhost:5173`, set
+  `server.hmr.clientPort: 443` and `server.hmr.protocol: 'wss'` in the
+  Vite config.
+
+For a production deployment, ignore all of this — dev-server gotchas
+only matter when you're sharing a dev server (which is great for
+showing work-in-progress to a client, slightly more fiddly than
+shipping a static build).
 
 ---
 
