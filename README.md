@@ -54,7 +54,29 @@ signed token, a mount path, and a short-lived session cookie.
 
 ## Install
 
-### Quick start (build from source)
+### One-line install on a Debian/Ubuntu VPS
+
+```shell
+curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh | sudo bash
+```
+
+That installs Go (if missing), clones + builds speakeasy, creates the
+`speakeasy` system user, writes a hardened systemd unit, adds you to the
+`speakeasy` group, and drops a commented example config at
+`/etc/speakeasy/config.toml.example`. It stops short of starting the daemon —
+edit your config first, then:
+
+```shell
+sudo cp /etc/speakeasy/config.toml.example /etc/speakeasy/config.toml
+sudo nano /etc/speakeasy/config.toml              # set domain + routes
+sudo -u speakeasy speakeasy --config /etc/speakeasy/config.toml admin set-password  # optional
+sudo systemctl enable --now speakeasy
+```
+
+Log out + back in once so your shell picks up the `speakeasy` group, then
+you can run `speakeasy token mint …` without `sudo`.
+
+### Build from source manually
 
 ```shell
 # Requires Go 1.25+
@@ -64,33 +86,25 @@ go build -o speakeasy ./cmd/speakeasy
 sudo install -m 0755 speakeasy /usr/local/bin/
 ```
 
-A `.deb` / `.rpm` install target (via `nfpm`) is the next step.
+Then create `/etc/speakeasy/`, the `speakeasy` user, the systemd unit — or
+just run `./scripts/install.sh` from a clone, it's the same script.
+
+A `.deb` / `.rpm` install path (via `nfpm`) is the next planned step.
 
 ### Minimal config
 
-Create `/etc/speakeasy/config.toml`:
-
 ```toml
+# /etc/speakeasy/config.toml
 [server]
 domain = "yoursite.com"
 
 [tls]
-mode = "autocert"            # Let's Encrypt, needs ports 80+443
+mode = "autocert"              # Let's Encrypt, needs ports 80+443
 
 [[routes]]
 name     = "preview"
 path     = "/preview"
 upstream = "http://localhost:8080"
-```
-
-Then:
-
-```shell
-# Set an admin password for the web panel (optional — CLI works without it)
-sudo speakeasy admin set-password
-
-# Run the gateway
-sudo speakeasy serve
 ```
 
 ## Usage
@@ -127,57 +141,67 @@ speakeasy token list
 
 ## Deployment topologies
 
-### VPS with public IP
+### 1) VPS with public IP — simplest
 
-Run speakeasy with `tls.mode = "autocert"`. Point DNS at the VPS, open ports
-80+443, run `speakeasy serve` under systemd. Done.
+Run speakeasy with `tls.mode = "autocert"` and you're done. Point DNS at the
+VPS, open ports 80+443, `scripts/install.sh` handles the rest. This is the
+shape the one-line installer targets.
 
-### Home app behind a VPS (recommended for home sharing)
+### 2) Home app behind a VPS tunnel — recommended for sharing home machines
 
-Run speakeasy on a cheap VPS with a public IP, tunnel back to your home
-box over Tailscale or WireGuard, proxy incoming invites to the home app.
-External users only ever see the VPS; nothing at home is publicly reachable.
+Residential ISPs often block inbound 80/443, break Let's Encrypt via dynamic
+IPs, or use CGNAT. Solution: run speakeasy on a cheap public VPS, connect the
+home box to it over an overlay network, proxy invitees to the home app.
 
-See the step-by-step guide:
+Three substrates for the tunnel, in increasing order of self-containment:
+
+- **Tailscale (free tier)** — 3 users / 100 devices, easy, 5 minutes. Uses
+  Tailscale's coordinator/DERP infra. Fine for personal projects.
+- **Headscale (self-hosted Tailscale coordinator) + Caddy on the VPS** — keeps
+  the Tailscale client UX but the coordinator runs on your VPS. No cloud
+  dependency for coordination; still uses Tailscale's public DERP relays
+  unless you run your own. Caddy fronts both speakeasy and Headscale on 443
+  with separate subdomains.
+- **Bare WireGuard** — fewest moving parts, keys exchanged manually,
+  long-term forgettable. No auto discovery, no MagicDNS.
+
+Full walkthrough with all three, plus DartNode-specific DNS steps, Vite-app
+gotchas, and SPA sub-path config:
 **[docs/deploy-home-through-vps.md](docs/deploy-home-through-vps.md)**.
 
-### Home machine behind a residential ISP
+### 3) Home app behind Cloudflare Tunnel (no VPS needed)
 
-Residential ISPs commonly block inbound 80/443, break Let's Encrypt via
-dynamic IPs, or use CGNAT. Use an outbound tunnel instead:
-
-**Cloudflare Tunnel** (easiest): run `cloudflared` on the home box → outbound
-tunnel to CF → CF serves `yoursite.com` and forwards plain HTTP to speakeasy.
-Configure:
+Run `cloudflared` on the home box, outbound tunnel to Cloudflare, CF serves
+`yoursite.com` and forwards plain HTTP to speakeasy on the home box:
 
 ```toml
 [server]
 domain      = "yoursite.com"
-trust_proxy = true        # CF terminates TLS; trust X-Forwarded-* and keep Secure cookies
+trust_proxy = true     # CF terminates TLS; trust X-Forwarded-* + keep Secure cookies
 
 [tls]
-mode = "http"             # CF handles TLS; speakeasy serves plain HTTP on LAN
+mode = "http"          # CF handles TLS; speakeasy serves plain HTTP internally
 ```
 
-**Alternatives**: boringproxy, frp, Tailscale Funnel, or a $5/mo VPS with a
-WireGuard tunnel back to home (speakeasy on the VPS, app at home).
+Good for "I don't want to rent a VPS" scenarios. Downside: Cloudflare is in
+the request path.
 
 ## Configuration reference
 
 See [`packaging/config.toml.example`](packaging/config.toml.example) for the
 full commented template. Key options:
 
-| Key                              | Default                        | Purpose |
-|----------------------------------|--------------------------------|---------|
-| `server.domain`                  | (required)                     | Public hostname. |
-| `server.site_name`               | `server.domain`                | Shown on invite landing. |
-| `server.trust_proxy`             | `false`                        | Keep `Secure` cookies behind a TLS-terminating proxy. |
-| `server.data_dir`                | `/var/lib/speakeasy`           | SQLite DB, autocert cache, signing key. |
-| `server.socket_path`             | `/run/speakeasy/speakeasy.sock`| CLI↔daemon IPC. Group `speakeasy`, mode 0660. |
-| `server.admin_password_file`     | `<data_dir>/admin.hash`        | Bcrypt hash for `/admin`. Missing = panel disabled. |
-| `server.session_ttl`             | `86400` (24h)                  | Session cookie lifetime. |
-| `tls.mode`                       | `autocert`                     | `autocert` / `files` / `http`. |
-| `[[routes]]`                     | —                              | One per gated mount path. |
+| Key                              | Default                         | Purpose |
+|----------------------------------|---------------------------------|---------|
+| `server.domain`                  | (required)                      | Public hostname. |
+| `server.site_name`               | `server.domain`                 | Shown on invite landing. |
+| `server.trust_proxy`             | `false`                         | Keep `Secure` cookies behind a TLS-terminating proxy. |
+| `server.data_dir`                | `/var/lib/speakeasy`            | SQLite DB, autocert cache, signing key. |
+| `server.socket_path`             | `/run/speakeasy/speakeasy.sock` | CLI↔daemon IPC. Group `speakeasy`, mode 0660. |
+| `server.admin_password_file`     | `<data_dir>/admin.hash`         | Bcrypt hash for `/admin`. Missing = panel disabled. |
+| `server.session_ttl`             | `86400` (24h)                   | Session cookie lifetime. |
+| `tls.mode`                       | `autocert`                      | `autocert` / `files` / `http`. |
+| `[[routes]]`                     | —                               | One per gated mount path. |
 
 ## Architecture
 
@@ -189,6 +213,9 @@ internal/token/         # JWT HS256 signer + key generation
 internal/admin/         # HTTP API (token CRUD) + basic-auth + web UI
 internal/gateway/       # TLS, route matching, session middleware, proxy
 internal/daemon/        # process wiring (DB + socket + gateway + signals)
+scripts/install.sh      # one-line VPS installer
+packaging/              # example config + (soon) nfpm specs
+docs/                   # deployment guides
 ```
 
 ### Design notes
@@ -230,13 +257,17 @@ v1 in active development. Working:
 - [x] Admin CLI (`token mint/list/revoke/unrevoke`) over unix socket
 - [x] Admin web panel with QR codes, basic auth
 - [x] Reserved-path validation, graceful shutdown, embedded templates
+- [x] One-line VPS installer (`scripts/install.sh`)
+- [x] Home-via-VPS deployment guide (Tailscale / Headscale / WireGuard)
 
 Remaining for v1:
 
-- [ ] `.deb` / `.rpm` packaging via `nfpm` + systemd unit
+- [ ] `.deb` / `.rpm` packaging via `nfpm`
+- [ ] Docker image (maybe)
 
 Beyond v1: host-based routing, arbitrary path scopes, multi-route tokens,
-Ed25519 signing, token families, magic-link email delivery.
+Ed25519 signing, token families, magic-link email delivery, self-hosted DERP
+relay for the Headscale topology.
 
 ## License
 
