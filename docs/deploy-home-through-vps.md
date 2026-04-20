@@ -632,3 +632,239 @@ rather than linking home to a VPS. See `README.md` → "Home machine behind
 a residential ISP" for that setup. Either shape works; the home↔VPS flow
 documented here is useful when you want full control of the edge
 (logging, IP allowlists, etc.).
+
+### Headscale + Caddy (fully self-hosted, no Tailscale cloud)
+
+Tailscale's free tier caps at 3 users / 100 devices and ties you to their
+coordination service. If you want the same client UX but with the control
+plane on *your* VPS — zero dependency on Tailscale's cloud — swap the
+coordinator for [Headscale](https://github.com/juanfont/headscale) and
+put [Caddy](https://caddyserver.com/) in front to terminate TLS for both
+speakeasy and Headscale.
+
+**Architecture change:**
+
+```
+ Before (Tailscale SaaS)            After (self-hosted)
+ ──────────────────────────         ────────────────────────────────
+ speakeasy owns 80/443              Caddy owns 80/443
+ autocert → Let's Encrypt           │  ├── donpedersen.com    → speakeasy :8443
+                                    │  └── headscale.donpedersen.com → headscale :8080
+ tailscale client → Tailscale       Headscale on VPS (coordinator)
+   coordinator (SaaS)               Tailscale client → Headscale
+```
+
+The Tailscale *client* stays the same — you just point it at a different
+login server. Headscale speaks the Tailscale protocol.
+
+**1. Move speakeasy off 80/443.** Back up the config, then:
+
+```toml
+# /etc/speakeasy/config.toml
+[server]
+domain      = "yoursite.com"
+site_name   = "My Stuff"
+http_port   = 8443
+trust_proxy = true      # Caddy terminates TLS, sets X-Forwarded-*
+
+[tls]
+mode = "http"           # no autocert — Caddy handles certs now
+
+[[routes]]
+name     = "app"
+path     = "/"
+upstream = "http://100.64.0.2"   # Tailscale IP of the home box (see step 5)
+```
+
+```shell
+sudo systemctl restart speakeasy
+sudo ss -tlnp | grep speakeasy    # confirm now on :8443 only
+```
+
+Drop `AmbientCapabilities=CAP_NET_BIND_SERVICE` from the systemd unit if
+you want — no longer needed on a high port. Harmless to leave it.
+
+**2. Install Caddy** via their official apt repo:
+
+```shell
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install -y caddy
+```
+
+**3. Point `headscale.yoursite.com` at the VPS** (another `A` record at
+your DNS provider, same IP as the apex). Wait for propagation.
+
+**4. Write the Caddyfile** and start:
+
+```shell
+sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
+yoursite.com {
+    reverse_proxy 127.0.0.1:8443
+}
+
+headscale.yoursite.com {
+    reverse_proxy 127.0.0.1:8080
+}
+EOF
+sudo systemctl restart caddy
+sudo journalctl -u caddy -n 20 --no-pager   # expect "certificate obtained successfully" ×2
+
+# Smoke test
+curl -sI https://yoursite.com/health
+curl -sI https://headscale.yoursite.com/health
+```
+
+**5. Install Headscale** from the official `.deb`:
+
+```shell
+curl -LO https://github.com/juanfont/headscale/releases/download/v0.28.0/headscale_0.28.0_linux_amd64.deb
+sudo dpkg -i headscale_0.28.0_linux_amd64.deb
+```
+
+Write `/etc/headscale/config.yaml` (back up the shipped one first):
+
+```yaml
+server_url: https://headscale.yoursite.com
+
+listen_addr: 127.0.0.1:8080
+metrics_listen_addr: 127.0.0.1:9090
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
+
+private_key_path: /var/lib/headscale/private.key
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+derp:
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  paths: []
+  auto_update_enabled: true
+  update_frequency: 24h
+
+database:
+  type: sqlite3
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+    write_ahead_log: true
+
+# TLS handled by Caddy.
+tls_letsencrypt_hostname: ""
+tls_cert_path: ""
+tls_key_path: ""
+
+log:
+  format: text
+  level: info
+
+dns:
+  magic_dns: true
+  base_domain: hs.yoursite.com     # any subdomain you won't use publicly
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+  search_domains: []
+  extra_records: []
+
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+
+policy:
+  mode: file
+  path: ""
+```
+
+Validate + start:
+
+```shell
+sudo -u headscale headscale configtest
+sudo systemctl enable --now headscale
+curl -sI https://headscale.yoursite.com/health   # 200 via Caddy
+```
+
+**6. Create a user + pre-auth key:**
+
+```shell
+sudo headscale users create don
+sudo headscale users list                        # note the numeric ID
+sudo headscale preauthkeys create --user <ID> --reusable --expiration 1h
+# Copy the printed hskey-auth-... string.
+```
+
+**7. Re-register both boxes against Headscale** (on the VPS first, then
+the home box — SSH to it via its LAN IP since the tunnel is temporarily
+down):
+
+```shell
+sudo tailscale logout
+sudo tailscale up \
+  --login-server=https://headscale.yoursite.com \
+  --auth-key=<paste key here>
+sudo tailscale status
+```
+
+Expect `tailscale status` on the VPS to show both nodes once the home
+box is also switched.
+
+**8. Verify the tunnel.** Tailscale clients assign new IPs from
+`100.64.0.0/10`:
+
+```shell
+# On the VPS:
+sudo tailscale ping lunchbox-linux      # should succeed
+curl -sI http://100.64.0.2/             # home app via tunnel (use real IP)
+```
+
+Update speakeasy's `upstream` to the home box's new Tailscale IP (it
+likely changed) and restart:
+
+```shell
+sudo sed -i 's|http://<old>|http://100.64.0.2|' /etc/speakeasy/config.toml
+sudo systemctl restart speakeasy
+```
+
+**9. End-to-end check.** Mint a token, paste the link in a browser:
+
+```shell
+speakeasy --config /etc/speakeasy/config.toml token mint \
+  --label self-test --route app --expires 1h
+```
+
+#### Gotchas
+
+- **`headscale preauthkeys create --user <name>`** — 0.28+ requires the
+  numeric ID, not the user name. `headscale users list` shows it.
+- **MagicDNS bare names (`lunchbox-linux`) may not resolve** on the VPS
+  out of the box even with `magic_dns: true`. The Tailscale IP always
+  works; if you care about name-based `upstream`, check `resolvectl
+  status tailscale0` and `dig @100.100.100.100 <host>.hs.yoursite.com`
+  to see whether the client is accepting Headscale's DNS config.
+- **IP6tables warnings at `tailscale up`** about missing kernel
+  modules are cosmetic on most VPS kernels — IPv4 still works.
+- **`base_domain` should be a subdomain you don't use publicly** (e.g.
+  `hs.yoursite.com`). If it collides with real public DNS records,
+  MagicDNS lookups race with real ones.
+- **DERP**: leaving `urls: [https://controlplane.tailscale.com/...]`
+  means NAT traversal still relays through Tailscale's DERP fleet when
+  direct connection fails. For a VPS-with-public-IP + home-outbound
+  topology direct will nearly always work; if you want full independence
+  (no Tailscale infra at all), self-host a DERP server
+  (`tailscale/derper`). Out of scope here.
+
+#### Tradeoffs
+
+You take on: running Headscale + Caddy as long-lived services, managing
+pre-auth keys, handling your own minor operational issues. In return you
+get: no per-user device caps, no cloud dependency, full control of ACLs
+and DNS, and your nodes stop appearing in Tailscale's admin console.
