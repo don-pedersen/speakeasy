@@ -60,33 +60,75 @@ signed token, a mount path, and a short-lived session cookie.
 curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh | sudo bash
 ```
 
-That installs Go (if missing), clones + builds speakeasy, creates the
-`speakeasy` system user, writes a hardened systemd unit, adds you to the
-`speakeasy` group, and drops a commented example config. It stops short of
-starting the daemon — generate your config with `init`, then launch:
+Then configure and launch:
 
 ```shell
-# Generate the config (interactive prompts; or pass all --flags for unattended)
-sudo speakeasy init
-
-# (optional) enable the /admin web panel
-sudo -u speakeasy speakeasy admin set-password
-
-# Launch
+sudo speakeasy init                        # prompts for domain + one route
+sudo -u speakeasy speakeasy admin set-password   # optional, enables /admin
 sudo systemctl enable --now speakeasy
 ```
 
 Log out + back in once so your shell picks up the `speakeasy` group, then
 you can run `speakeasy token mint …` without `sudo`.
 
-For fully scripted provisioning:
+**Fully unattended (for Ansible / Terraform / provisioning scripts):**
 
 ```shell
-sudo speakeasy init \
+curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh | sudo bash
+sudo speakeasy init --non-interactive \
   --domain example.com --route-name app \
   --route-path / --route-upstream http://localhost:8080
 sudo systemctl enable --now speakeasy
 ```
+
+#### What the installer does
+
+Exactly this, in order — [source](scripts/install.sh):
+
+| Step | What it creates / installs |
+|------|----------------------------|
+| Go toolchain | Latest stable (auto-probed from `go.dev/VERSION`) → `/usr/local/go/` + `/etc/profile.d/go.sh`. Skipped if Go ≥ 1.25 already present. |
+| Build prereqs | `git`, `curl`, `ca-certificates` via `apt-get`. |
+| Binary | Clones the repo to a temp dir, runs `go build`, installs to `/usr/local/bin/speakeasy` (mode 0755). Temp dir removed on exit. |
+| Service user | System user `speakeasy` (no shell, home = `/var/lib/speakeasy`). |
+| Directories | `/etc/speakeasy/` (`0750 root:speakeasy`) and `/var/lib/speakeasy/` (`0750 speakeasy:speakeasy`). |
+| Example config | `/etc/speakeasy/config.toml.example` — not touched on reruns. |
+| systemd unit | `/etc/systemd/system/speakeasy.service` with `AmbientCapabilities=CAP_NET_BIND_SERVICE`, `RuntimeDirectory=speakeasy`, and the full sandboxing directive set (`ProtectSystem=strict`, `NoNewPrivileges`, etc.). **Not enabled** — you start it after `speakeasy init`. |
+| Group membership | Adds `$SUDO_USER` to the `speakeasy` group. |
+
+The installer is **idempotent** — re-running is safe. Existing configs, data,
+and users are left alone; the binary and systemd unit get refreshed.
+
+#### Environment variable overrides
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SPEAKEASY_REPO` | `https://git.hou.snaju.com/dpedersen/speakeasy.git` | Clone source (useful for forks or private mirrors). |
+| `SPEAKEASY_REF`  | `main` | Branch or tag to build. |
+| `PREFIX`         | `/usr/local` | Binary install prefix. |
+
+Example — build a specific tag from a fork:
+
+```shell
+curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh \
+  | sudo SPEAKEASY_REPO=https://github.com/acme/speakeasy.git \
+         SPEAKEASY_REF=v1.2.0 \
+         bash
+```
+
+#### Running from a local clone
+
+If you've already cloned the repo (for development, an air-gapped install, or
+just to read the script before piping it to bash):
+
+```shell
+git clone https://git.hou.snaju.com/dpedersen/speakeasy.git
+cd speakeasy
+sudo ./scripts/install.sh
+```
+
+Same script, same behavior. It still clones a fresh copy to a temp dir so
+your working tree isn't mutated.
 
 ### Build from source manually
 
@@ -98,8 +140,9 @@ go build -o speakeasy ./cmd/speakeasy
 sudo install -m 0755 speakeasy /usr/local/bin/
 ```
 
-Then create `/etc/speakeasy/`, the `speakeasy` user, the systemd unit — or
-just run `./scripts/install.sh` from a clone, it's the same script.
+You'll need to create `/etc/speakeasy/`, the `speakeasy` user, and the
+systemd unit yourself — or just run `./scripts/install.sh` as above, which
+does all of that for you.
 
 A `.deb` / `.rpm` install path (via `nfpm`) is the next planned step.
 
