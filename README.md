@@ -57,7 +57,7 @@ signed token, a mount path, and a short-lived session cookie.
 ### One-line install on a Debian/Ubuntu VPS
 
 ```shell
-curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/don-pedersen/speakeasy/main/scripts/install.sh | sudo bash
 ```
 
 Then configure and launch:
@@ -74,7 +74,7 @@ you can run `speakeasy token mint …` without `sudo`.
 **Fully unattended (for Ansible / Terraform / provisioning scripts):**
 
 ```shell
-curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/don-pedersen/speakeasy/main/scripts/install.sh | sudo bash
 sudo speakeasy init --non-interactive \
   --domain example.com --route-name app \
   --route-path / --route-upstream http://localhost:8080
@@ -103,14 +103,14 @@ and users are left alone; the binary and systemd unit get refreshed.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SPEAKEASY_REPO` | `https://git.hou.snaju.com/dpedersen/speakeasy.git` | Clone source (useful for forks or private mirrors). |
+| `SPEAKEASY_REPO` | `https://github.com/don-pedersen/speakeasy.git` | Clone source (useful for forks or private mirrors). |
 | `SPEAKEASY_REF`  | `main` | Branch or tag to build. |
 | `PREFIX`         | `/usr/local` | Binary install prefix. |
 
 Example — build a specific tag from a fork:
 
 ```shell
-curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh \
+curl -fsSL https://raw.githubusercontent.com/don-pedersen/speakeasy/main/scripts/install.sh \
   | sudo SPEAKEASY_REPO=https://github.com/acme/speakeasy.git \
          SPEAKEASY_REF=v1.2.0 \
          bash
@@ -122,7 +122,7 @@ If you've already cloned the repo (for development, an air-gapped install, or
 just to read the script before piping it to bash):
 
 ```shell
-git clone https://git.hou.snaju.com/dpedersen/speakeasy.git
+git clone https://github.com/don-pedersen/speakeasy.git
 cd speakeasy
 sudo ./scripts/install.sh
 ```

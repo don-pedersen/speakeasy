@@ -17,14 +17,14 @@
 #   - Configure DNS, TLS, firewall rules, or routes
 #
 # Usage:
-#   curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/don-pedersen/speakeasy/main/scripts/install.sh | sudo bash
 # or:
 #   sudo ./scripts/install.sh
 
 set -euo pipefail
 
 MIN_GO_VERSION="1.25"
-REPO_URL="${SPEAKEASY_REPO:-https://git.hou.snaju.com/dpedersen/speakeasy.git}"
+REPO_URL="${SPEAKEASY_REPO:-https://github.com/don-pedersen/speakeasy.git}"
 REPO_REF="${SPEAKEASY_REF:-main}"
 PREFIX="${PREFIX:-/usr/local}"
 BIN="$PREFIX/bin/speakeasy"
@@ -141,7 +141,7 @@ log "Writing systemd unit $UNIT"
 cat > "$UNIT" <<'UNIT'
 [Unit]
 Description=Speakeasy Gateway
-Documentation=https://git.hou.snaju.com/dpedersen/speakeasy
+Documentation=https://github.com/don-pedersen/speakeasy
 After=network-online.target
 Wants=network-online.target
 
@@ -203,7 +203,7 @@ Next steps:
        speakeasy --config $CONF_DIR/config.toml token mint --label alice --route <name> --expires 7d
 
 Docs:
-  - README                             https://git.hou.snaju.com/dpedersen/speakeasy
+  - README                             https://github.com/don-pedersen/speakeasy
   - home -> VPS -> invited-user guide  docs/deploy-home-through-vps.md
   - Fully self-hosted (Caddy+Headscale)  same doc, Appendix at the bottom
 SUMMARY
