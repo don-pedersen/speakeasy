@@ -189,10 +189,11 @@ cat <<SUMMARY
 $(printf '\033[1;32m==> speakeasy installed\033[0m')
 
 Next steps:
-  1. Edit your config:
-       sudo cp $CONF_DIR/config.toml.example $CONF_DIR/config.toml
-       sudo nano $CONF_DIR/config.toml           # set domain + routes
-       sudo -u speakeasy speakeasy --config $CONF_DIR/config.toml config validate
+  1. Generate a starter config (interactive prompts, or all-flags for automation):
+       sudo speakeasy init
+         # or, unattended:
+       sudo speakeasy init --domain example.com \\
+         --route-name app --route-path / --route-upstream http://localhost:8080
   2. (optional) enable the /admin web panel:
        sudo -u speakeasy speakeasy --config $CONF_DIR/config.toml admin set-password
   3. Start the gateway:

@@ -62,19 +62,31 @@ curl -fsSL https://git.hou.snaju.com/dpedersen/speakeasy/raw/main/scripts/instal
 
 That installs Go (if missing), clones + builds speakeasy, creates the
 `speakeasy` system user, writes a hardened systemd unit, adds you to the
-`speakeasy` group, and drops a commented example config at
-`/etc/speakeasy/config.toml.example`. It stops short of starting the daemon —
-edit your config first, then:
+`speakeasy` group, and drops a commented example config. It stops short of
+starting the daemon — generate your config with `init`, then launch:
 
 ```shell
-sudo cp /etc/speakeasy/config.toml.example /etc/speakeasy/config.toml
-sudo nano /etc/speakeasy/config.toml              # set domain + routes
-sudo -u speakeasy speakeasy --config /etc/speakeasy/config.toml admin set-password  # optional
+# Generate the config (interactive prompts; or pass all --flags for unattended)
+sudo speakeasy init
+
+# (optional) enable the /admin web panel
+sudo -u speakeasy speakeasy admin set-password
+
+# Launch
 sudo systemctl enable --now speakeasy
 ```
 
 Log out + back in once so your shell picks up the `speakeasy` group, then
 you can run `speakeasy token mint …` without `sudo`.
+
+For fully scripted provisioning:
+
+```shell
+sudo speakeasy init \
+  --domain example.com --route-name app \
+  --route-path / --route-upstream http://localhost:8080
+sudo systemctl enable --now speakeasy
+```
 
 ### Build from source manually
 
@@ -206,7 +218,7 @@ full commented template. Key options:
 ## Architecture
 
 ```
-cmd/speakeasy/          # cobra CLI (serve, token, config, admin)
+cmd/speakeasy/          # cobra CLI (serve, init, token, config, admin)
 internal/config/        # TOML loader + validation
 internal/store/         # SQLite-backed tokens & sessions (pure-Go sqlite)
 internal/token/         # JWT HS256 signer + key generation
@@ -257,7 +269,7 @@ v1 in active development. Working:
 - [x] Admin CLI (`token mint/list/revoke/unrevoke`) over unix socket
 - [x] Admin web panel with QR codes, basic auth
 - [x] Reserved-path validation, graceful shutdown, embedded templates
-- [x] One-line VPS installer (`scripts/install.sh`)
+- [x] One-line VPS installer (`scripts/install.sh`) + `speakeasy init` config generator
 - [x] Home-via-VPS deployment guide (Tailscale / Headscale / WireGuard)
 
 Remaining for v1:
