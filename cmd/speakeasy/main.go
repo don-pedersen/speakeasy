@@ -26,6 +26,7 @@ func main() {
 
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newConfigCmd())
+	root.AddCommand(newInitCmd())
 	root.AddCommand(newTokenCmd())
 	root.AddCommand(newAdminCmd())
 
