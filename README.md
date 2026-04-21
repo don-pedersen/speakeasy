@@ -58,7 +58,7 @@ signed token, a mount path, and a short-lived session cookie.
 
 ```shell
 # Requires Go 1.25+
-git clone https://git.hou.snaju.com/dpedersen/speakeasy.git
+git clone https://github.com/don-pedersen/speakeasy.git
 cd speakeasy
 go build -o speakeasy ./cmd/speakeasy
 sudo install -m 0755 speakeasy /usr/local/bin/

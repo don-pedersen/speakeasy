@@ -17,12 +17,12 @@ import (
 )
 
 type testEnv struct {
-	gw       *Gateway
-	server   *httptest.Server
-	client   *http.Client
-	store    *store.Store
-	signer   *token.Signer
-	upstream *httptest.Server
+	gw        *Gateway
+	server    *httptest.Server
+	client    *http.Client
+	store     *store.Store
+	signer    *token.Signer
+	upstream  *httptest.Server
 	upstream2 *httptest.Server
 }
 

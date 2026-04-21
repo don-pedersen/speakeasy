@@ -52,10 +52,10 @@ func scanSession(row interface {
 	Scan(...any) error
 }) (*Session, error) {
 	var (
-		s          Session
-		created    string
-		expires    string
-		lastSeen   string
+		s        Session
+		created  string
+		expires  string
+		lastSeen string
 	)
 	if err := row.Scan(&s.ID, &s.TokenID, &s.Route, &created, &expires, &lastSeen); err != nil {
 		return nil, err

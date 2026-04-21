@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	issuer         = "speakeasy"
-	schemaVersion  = 1
-	minKeyLen      = 32
-	defaultKeyLen  = 64
+	issuer        = "speakeasy"
+	schemaVersion = 1
+	minKeyLen     = 32
+	defaultKeyLen = 64
 )
 
 // Claims is the Speakeasy access-token payload. The JTI is the stable token

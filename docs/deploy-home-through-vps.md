@@ -232,7 +232,7 @@ echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh
 go version
 
 # Build speakeasy
-git clone https://git.hou.snaju.com/dpedersen/speakeasy.git
+git clone https://github.com/don-pedersen/speakeasy.git
 cd speakeasy
 go build -o speakeasy ./cmd/speakeasy
 sudo install -m 0755 speakeasy /usr/local/bin/

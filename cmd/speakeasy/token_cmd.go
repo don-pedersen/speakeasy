@@ -182,4 +182,3 @@ func fmtTimePtr(t *time.Time, zero string) string {
 	}
 	return t.UTC().Format("2006-01-02 15:04 MST")
 }
-
