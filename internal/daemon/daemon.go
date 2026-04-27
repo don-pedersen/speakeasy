@@ -140,11 +140,7 @@ func serveUnixSocket(path string, handler http.Handler) (func(), error) {
 // treated as "admin panel disabled" (returns nil, nil). An unreadable or
 // malformed file is an error.
 func loadAdminAuth(cfg *config.Config) (*admin.BasicAuth, error) {
-	path := cfg.Server.AdminPasswordFile
-	if path == "" {
-		// Default: next to the DB.
-		path = filepath.Join(cfg.Server.DataDir, "admin.hash")
-	}
+	path := admin.HashPath(cfg.Server.DataDir, cfg.Server.AdminPasswordFile)
 	hash, err := admin.LoadHashFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

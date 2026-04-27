@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -35,6 +36,18 @@ func NewBasicAuth(hash string) (*BasicAuth, error) {
 		return nil, fmt.Errorf("admin password hash is not a valid bcrypt hash: %w", err)
 	}
 	return &BasicAuth{hash: []byte(hash)}, nil
+}
+
+// HashPath returns the resolved admin hash file path. If override is set
+// (typically from server.admin_password_file or a CLI --file flag) it wins;
+// otherwise the file lives next to the rest of the daemon's state in dataDir.
+// Both the CLI writer and the daemon reader call this so their defaults
+// can't drift out of sync.
+func HashPath(dataDir, override string) string {
+	if override != "" {
+		return override
+	}
+	return filepath.Join(dataDir, "admin.hash")
 }
 
 // LoadHashFile reads a bcrypt hash from a file, returning its contents.
